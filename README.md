@@ -1,0 +1,1 @@
+# hs2agda-plugin
