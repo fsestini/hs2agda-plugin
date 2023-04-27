@@ -29,7 +29,7 @@ listMap f (Cons x xs) = Cons (f x) (listMap f xs)
 
 {-# ANN module (HS2AgdaRaw [text|
 
-safeHeadPf : forall x xs -> safeHead (x : xs) === Some x
+safeHeadPf : forall x xs -> safeHead (Cons x xs) === Some x
 safeHeadPf x xs = refl
 
 listMapId : forall xs -> listMap (\x -> x) xs === xs
