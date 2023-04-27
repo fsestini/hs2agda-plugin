@@ -24,12 +24,13 @@ data CodeGenResult = CodeGenResult
 ppWholeModule :: ModuleName -> [ModuleName] -> CodeGenResult -> SDoc
 ppWholeModule m imps cgr =
   vcatsp
-    $ (text "module" <+> ppr m <+> text "where")
-    : map ((text "open import" <+>) . ppr) imps ++
-    [ dataTypes cgr
+    [ text "module" <+> ppr m <+> text "where"
+    , vcat (map (text "open import" <+>) imports)
+    , dataTypes cgr
     , binders cgr
     , rawCode cgr
     ]
+  where imports = text "HsPrelude" : map ppr imps
 
 ppAgdaData :: TyCon -> SDoc
 ppAgdaData tc = toAgdaData (tyConName tc) (tyConTyVars tc) dcsinfo
