@@ -122,10 +122,10 @@ ppAgdaExpr (Case e _ _ alts) = vcat $
       [ parens (ppr c <+> hsep (map ppr vs)) <+> text "->"
       , nest 2 (ppAgdaExpr e)
       ]
-ppAgdaExpr (App e arg) = cparen b1 (ppAgdaExpr e) <+> cparen b2 (ppAgdaExpr arg)
+ppAgdaExpr e@(App _ _) =
+  hcatsp $ ppAgdaExpr f : map (\a -> cparen (shouldParen a) (ppAgdaExpr a)) args
   where
-    b1 = shouldParen e
-    b2 = shouldParen arg
+    (f, args) = collectArgs e
 ppAgdaExpr (Type t) = text "{" <+> ppr t <+> text "}"
 ppAgdaExpr (Var v) = ppr v
 ppAgdaExpr (Let (NonRec b e) e') = vcat
