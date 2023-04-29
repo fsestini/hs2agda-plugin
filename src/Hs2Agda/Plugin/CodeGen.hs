@@ -54,7 +54,6 @@ codeGenBndr env b e = case anns of
   where
     anns = lookupWithDefaultUFM_Directly env [] (varUnique b)
 
-
 codeGenBinders :: NameEnv [HS2AgdaAnn] -> [CoreBind] -> [SDoc]
 codeGenBinders env = mapMaybe (uncurry (codeGenBndr env) <=< unpackBndr)
   where
