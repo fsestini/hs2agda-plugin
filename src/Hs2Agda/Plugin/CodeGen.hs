@@ -49,7 +49,7 @@ codeGenData env =
 
 codeGenBndr :: NameEnv [HS2AgdaAnn] -> CoreBndr -> CoreExpr -> Maybe SDoc
 codeGenBndr env b e = case anns of
-  [HS2Agda] -> Just (toAgdaTopLevel b e)
+  [HS2Agda] -> Just (ppAgdaTopLevel b e)
   _         -> Nothing
   where
     anns = lookupWithDefaultUFM_Directly env [] (varUnique b)
@@ -83,13 +83,6 @@ ppAgdaData tc = toAgdaData (tyConName tc) (tyConTyVars tc) dcsinfo
                       let (_,_,_,_,x,y) = dataConFullSig dc
                       in (dataConName dc, x, y)) dcs
 
--- TODO: replace with functions already defined in GHC.Core module
-splitTypeLambdas :: CoreExpr -> ([Var], CoreExpr)
-splitTypeLambdas x@(Lam b e)
-  | isTyVar b = let (vs, e') = splitTypeLambdas e in (b : vs, e')
-  | otherwise = ([], x)
-splitTypeLambdas e = ([], e)
-
 ppTyBndr :: Var -> SDoc
 ppTyBndr v = braces (ppr v)
 
@@ -100,47 +93,47 @@ ppAgdaDecl v = hcatsp [ppr v, text ":", ppVars vars, ppr ty]
     ppVars vs = text "{" <+> hsep (map ppr vs) <+> text ": Set } ->"
     (vars, ty) = splitForAllTyCoVars (varType v)
 
-ppAgdaTopLevel :: Var -> SDoc -> CoreExpr -> SDoc
-ppAgdaTopLevel v aux e = vcat
-  [ hcatsp [ppr v, aux, text "="]
-  , nest 2 (toAgdaExpr e)
+ppAgdaBind :: Var -> CoreExpr -> SDoc
+ppAgdaBind v e = vcat [ hcatsp [ppr v, text "="], nest 2 (ppAgdaExpr e) ]
+
+ppAgdaTopLevelFunDef :: Var -> CoreExpr -> SDoc
+ppAgdaTopLevelFunDef v e = vcat
+  [ hcatsp $ [ppr v] ++ map ppTyBndr tyvs ++ map ppr vs ++ [text "="]
+  , nest 2 (ppAgdaExpr e')
   ]
+  where (tyvs, vs, e') = collectTyAndValBinders e
 
-toAgdaTopLevel :: Var -> CoreExpr -> SDoc
-toAgdaTopLevel v e = toAgdaBinder v (hcat (map ppTyBndr tyVars)) e'
-  where  (tyVars, e') = splitTypeLambdas e
-
-toAgdaBinder :: Var -> SDoc -> Expr Var -> SDoc
-toAgdaBinder v aux e = vcat
+ppAgdaTopLevel :: Var -> Expr Var -> SDoc
+ppAgdaTopLevel v e = vcat
   [ ppAgdaDecl v
-  , ppAgdaTopLevel v aux e
+  , ppAgdaTopLevelFunDef v e
   ]
 
-toAgdaExpr :: Expr Var -> SDoc
-toAgdaExpr (Lam b e) = vcat
+ppAgdaExpr :: Expr Var -> SDoc
+ppAgdaExpr (Lam b e) = vcat
   [ text "\\" <+> ppVar b <+> text "->"
-  , nest 2 (toAgdaExpr e)
+  , nest 2 (ppAgdaExpr e)
   ]
   where ppVar b = if isTyVar b then text "{" <+> ppr b <+> text "}" else ppr b
-toAgdaExpr (Case e _ _ alts) = vcat $
+ppAgdaExpr (Case e _ _ alts) = vcat $
   (text "case" <+> ppr e <+> text "of \\ where") :
   map (nest 2 . toAgdaAlt) alts
   where
     toAgdaAlt (Alt c vs e) = vcat
       [ parens (ppr c <+> hsep (map ppr vs)) <+> text "->"
-      , nest 2 (toAgdaExpr e)
+      , nest 2 (ppAgdaExpr e)
       ]
-toAgdaExpr (App e arg) = cparen b1 (toAgdaExpr e) <+> cparen b2 (toAgdaExpr arg)
+ppAgdaExpr (App e arg) = cparen b1 (ppAgdaExpr e) <+> cparen b2 (ppAgdaExpr arg)
   where
     b1 = shouldParen e
     b2 = shouldParen arg
-toAgdaExpr (Type t) = text "{" <+> ppr t <+> text "}"
-toAgdaExpr (Var v) = ppr v
-toAgdaExpr (Let (NonRec b e) e') = vcat
-  [ text "let" <+> toAgdaBinder b empty e
-  , text "in" <+> toAgdaExpr e'
+ppAgdaExpr (Type t) = text "{" <+> ppr t <+> text "}"
+ppAgdaExpr (Var v) = ppr v
+ppAgdaExpr (Let (NonRec b e) e') = vcat
+  [ text "let" <+> vcat [ppAgdaDecl b, ppAgdaBind b e]
+  , text "in" <+> ppAgdaExpr e'
   ]
-toAgdaExpr e = panic "HS2Agda: unsupported core expression" -- ppr e
+ppAgdaExpr e = panic "HS2Agda: unsupported core expression" -- ppr e
 
 toAgdaData :: Name -> [TyVar] -> [(Name, [Scaled Type], Type)] -> SDoc
 toAgdaData n vs dcs =
