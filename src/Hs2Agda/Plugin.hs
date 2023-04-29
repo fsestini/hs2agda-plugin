@@ -1,9 +1,7 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE LambdaCase #-}
-
 module Hs2Agda.Plugin (Text, someFunc, plugin, HS2AgdaAnn(..), NI.text) where
 
 import Hs2Agda.Plugin.CodeGen
+import Hs2Agda.Plugin.Types
 
 import GHC.Plugins
 import GHC.Hs
@@ -19,18 +17,12 @@ import System.Directory
 import Data.Bool (bool)
 import Data.List.Split (splitOn)
 import System.FilePath ((</>), takeDirectory)
-import GHC (mgLookupModule, Target (targetId), ModuleGraph, TargetId (TargetModule))
+import GHC (mgLookupModule, Target (targetId), ModuleGraph, TargetId (TargetModule), ClsInst)
 import qualified Data.Set as S
+import Hs2Agda.Plugin.TyClass (ppAgdaTyClassInst)
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
-
-data HS2AgdaAnn = HS2Agda | HS2AgdaRaw Text
-  deriving (Data, Show)
-
-getAgdaRaw :: HS2AgdaAnn -> Maybe Text
-getAgdaRaw (HS2AgdaRaw x) = Just x
-getAgdaRaw _ = Nothing
 
 plugin :: Plugin
 plugin = defaultPlugin
@@ -40,42 +32,6 @@ plugin = defaultPlugin
 
 install :: CorePlugin
 install _ todo = return (CoreDoPluginPass "test" pass : todo)
-
-codeGenAnns
-  :: ModuleEnv [HS2AgdaAnn]
-  -> NameEnv [HS2AgdaAnn]
-  -> [TyCon]
-  -> [CoreBind]
-  -> CodeGenResult
-codeGenAnns menv nenv tcs bs =
-  CodeGenResult
-    (vcatsp (codeGenData nenv tcs))
-    (vcatsp (codeGenBinders nenv bs))
-    (vcatsp (ppRawAgda (concat (moduleEnvElts menv))))
-  where
-    ppRawAgda = map (text . unpack) . mapMaybe getAgdaRaw
-
-codeGenData :: NameEnv [HS2AgdaAnn] -> [TyCon] -> [SDoc]
-codeGenData env =
-  mapMaybe (\tc -> if elemNameEnv (tyConName tc) env
-                   then Just (ppAgdaData tc)
-                   else Nothing)
-
-codeGenBndr :: NameEnv [HS2AgdaAnn] -> CoreBndr -> CoreExpr -> Maybe SDoc
-codeGenBndr env b e = case anns of
-  [HS2Agda] -> Just (toAgdaBinder b e)
-  _         -> Nothing
-  where
-    anns = lookupWithDefaultUFM_Directly env [] (varUnique b)
-
-unpackBndr :: CoreBind -> Maybe (CoreBndr, CoreExpr)
-unpackBndr = \case
-  NonRec b e   -> Just (b, e)
-  Rec [(b, e)] -> Just (b, e)
-  _            -> Nothing
-
-codeGenBinders :: NameEnv [HS2AgdaAnn] -> [CoreBind] -> [SDoc]
-codeGenBinders env = mapMaybe (uncurry (codeGenBndr env) <=< unpackBndr)
 
 getImportedModules :: ModuleGraph -> Module -> [Located ModuleName]
 getImportedModules modGraph m =
@@ -105,6 +61,17 @@ pass g = do
   --  putMsg (ppr mtargs)
 
   putMsg (text "We are in module:" <+> pprModule m)
+
+  putMsgS "Instances:"
+  forM_ (mg_insts g) (putMsg . ppAgdaTyClassInst (mg_binds g))
+  -- putMsg (ppr (map (ppAgdaTyClassInst (mg_binds g)) (mg_insts g)))
+
+  -- putMsgS "Binders:"
+  -- putMsg (ppr (mg_binds g))
+  -- putMsg . ppr . map (ppr . map (\b -> ppr (varUnique b) <+> text "::" <+> ppr (varType b))) .
+  --   flip map (mg_binds g) $ \case
+  --     (NonRec b _) -> [b] -- ppr b <+> ppr (varType b)
+  --     Rec bs -> map fst bs
 
   (xx, yy) <- getAnnotations deserializeWithData g
   let cgres = codeGenAnns xx yy (mg_tcs g) (mg_binds g)

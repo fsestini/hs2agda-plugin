@@ -24,6 +24,8 @@ library
 
     -- Modules included in this library but not exported.
     other-modules:    Hs2Agda.Plugin.CodeGen
+                    , Hs2Agda.Plugin.TyClass
+                    , Hs2Agda.Plugin.Types
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
