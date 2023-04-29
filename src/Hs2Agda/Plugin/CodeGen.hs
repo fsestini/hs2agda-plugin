@@ -54,14 +54,15 @@ codeGenBndr env b e = case anns of
   where
     anns = lookupWithDefaultUFM_Directly env [] (varUnique b)
 
-unpackBndr :: CoreBind -> Maybe (CoreBndr, CoreExpr)
-unpackBndr = \case
-  NonRec b e   -> Just (b, e)
-  Rec [(b, e)] -> Just (b, e)
-  _            -> Nothing
 
 codeGenBinders :: NameEnv [HS2AgdaAnn] -> [CoreBind] -> [SDoc]
 codeGenBinders env = mapMaybe (uncurry (codeGenBndr env) <=< unpackBndr)
+  where
+    unpackBndr :: CoreBind -> Maybe (CoreBndr, CoreExpr)
+    unpackBndr = \case
+      NonRec b e   -> Just (b, e)
+      Rec [(b, e)] -> Just (b, e)
+      _            -> Nothing
 
 ppWholeModule :: ModuleName -> [ModuleName] -> CodeGenResult -> SDoc
 ppWholeModule m imps cgr =
