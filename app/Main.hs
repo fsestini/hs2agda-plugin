@@ -19,12 +19,25 @@ data List a = Nil | Cons a (List a)
 data Bogus a b = MkBogus
 {-#  ANN type Bogus HS2Agda #-}
 
+class MyFunctor f where
+  mfmap :: (a -> b) -> f a -> f b
+  mfap   :: a -> f b -> f a
+
 instance Functor List where
   fmap f Nil = Nil
   fmap f (Cons x xs) = Cons (f x) (fmap f xs)
 
 instance Functor (Bogus a) where
-  fmap _ MkBogus = MkBogus
+  fmap = bogusFmap -- _ MkBogus = MkBogus
+
+instance MyFunctor (Bogus a) where
+  mfmap = fmap
+  mfap  = (<$)
+
+{-# ANN bogusFmap HS2Agda #-}
+bogusFmap f MkBogus = MkBogus
+
+
 
 {-}
 {-# ANN safeHead HS2Agda #-}

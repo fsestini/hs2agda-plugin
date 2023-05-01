@@ -43,15 +43,23 @@ ppInstanceBinders dictFun (e, bs) =
   if null bs then block else vcat [ text "mutual", nest 2 block ]
   where
     block = vcat $
-      [ text "instance" <+> ppAgdaDecl dictFun
-      , ppAgdaTopLevel dictFun empty e
+      [ text "instance" -- <+> ppAgdaDecl dictFun
+      --, ppAgdaTopLevel dictFun empty e
+      , nest 2 (ppAgdaTopLevel dictFun e)
       ] ++
-      map (uncurry toAgdaTopLevel) bs
+      map (uncurry ppAgdaTopLevel) bs
 
 ppAgdaTyClassInst :: [CoreBind] -> ClsInst -> SDoc
 ppAgdaTyClassInst bs i = -- pprInstance i <+> ppr (is_dfun i) <+> ppr (is_dfun i)
   vcat
-    [ _
+    [ ppr (map (\x -> let nm = varName x ; onm = getOccName x in
+                  [ ppr (idName x)
+                  , ppr (isGlobalId x)
+                  , ppr (isDerivedOccName onm) -- TODO: use this to filter
+                  , ppr (isDefaultMethodOcc onm)
+                  ]) fvs)
+    , ppr (localiseId dictFun)
+    , ppr (map splitAppTys (is_tys i))
     , ppInstanceBinders dictFun (e, bs')
     ]
   -- [ text "instance" <+> ppAgdaDecl dictFun
@@ -72,6 +80,7 @@ ppAgdaTyClassInst bs i = -- pprInstance i <+> ppr (is_dfun i) <+> ppr (is_dfun i
          else  (text "forall" : map ppTyBndr vs) ++ (text "->" : x)
     (e, bs') = findInstanceBinders dictFun bs
     fvs = filter (`notElem` (dictFun : map fst bs'))
+           -- (pAnd (`notElem` (dictFun : map fst bs')) (isDerivedOccName . occName))
         . concatMap (dVarSetElems . freeVarsOf . freeVars)
         $ (e : map snd bs')
     -- ((e, bs'), _) = findRelated bs dictFun
@@ -93,3 +102,6 @@ ppAgdaTyClassInst bs i = -- pprInstance i <+> ppr (is_dfun i) <+> ppr (is_dfun i
 
 -- freeVarsOfVEPairs :: [VEPair] -> SDoc
 -- freeVarsOfVEPairs = ppr . map (freeVars . snd)
+
+pAnd :: (a -> Bool) -> (a -> Bool) -> a -> Bool
+pAnd f g x = f x && g x

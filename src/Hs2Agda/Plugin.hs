@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 module Hs2Agda.Plugin (Text, someFunc, plugin, HS2AgdaAnn(..), NI.text) where
 
 import Hs2Agda.Plugin.CodeGen
@@ -20,6 +21,7 @@ import System.FilePath ((</>), takeDirectory)
 import GHC (mgLookupModule, Target (targetId), ModuleGraph, TargetId (TargetModule), ClsInst)
 import qualified Data.Set as S
 import Hs2Agda.Plugin.TyClass (ppAgdaTyClassInst)
+import Hs2Agda.Plugin.Scan
 
 someFunc :: IO ()
 someFunc = putStrLn "someFunc"
@@ -33,21 +35,21 @@ plugin = defaultPlugin
 install :: CorePlugin
 install _ todo = return (CoreDoPluginPass "test" pass : todo)
 
-getImportedModules :: ModuleGraph -> Module -> [Located ModuleName]
-getImportedModules modGraph m =
-  maybe (panic "module is not in module graph")
-        (map snd . ms_textual_imps)
-        (mgLookupModule modGraph m)
+-- getImportedModules :: ModuleGraph -> Module -> [Located ModuleName]
+-- getImportedModules modGraph m =
+--   maybe (panic "module is not in module graph")
+--         (map snd . ms_textual_imps)
+--         (mgLookupModule modGraph m)
 
-getTargetedImports :: [Target] -> [Located ModuleName] -> [ModuleName]
-getTargetedImports ts ls = S.toList (S.intersection targets imports)
-  where
-    targets = S.fromList (mapMaybe targetModule ts)
-    imports = S.fromList (map unLoc ls)
-    targetModule :: Target -> Maybe ModuleName
-    targetModule t = case targetId t of
-      TargetModule m -> Just m
-      _              -> Nothing
+-- getTargetedImports :: [Target] -> [Located ModuleName] -> [ModuleName]
+-- getTargetedImports ts ls = S.toList (S.intersection targets imports)
+--   where
+--     targets = S.fromList (mapMaybe targetModule ts)
+--     imports = S.fromList (map unLoc ls)
+--     targetModule :: Target -> Maybe ModuleName
+--     targetModule t = case targetId t of
+--       TargetModule m -> Just m
+--       _              -> Nothing
 
 pass :: ModGuts -> CoreM ModGuts
 pass g = do
@@ -55,35 +57,41 @@ pass g = do
   dflags <- getDynFlags
   henv <- getHscEnv
 
-  let allImports   = getImportedModules (hsc_mod_graph henv) m
-      localImports = getTargetedImports (hsc_targets henv) allImports
-  putMsg (ppr localImports)
-  --  putMsg (ppr mtargs)
-
   putMsg (text "We are in module:" <+> pprModule m)
 
-  putMsgS "Instances:"
-  forM_ (mg_insts g) (putMsg . ppAgdaTyClassInst (mg_binds g))
+  let localImports = getTargetedImports henv m
+  putMsg (ppr localImports)
+
+  -- putMsgS "Instances:"
+  -- forM_ (mg_insts g) (putMsg . ppAgdaTyClassInst (mg_binds g))
   -- putMsg (ppr (map (ppAgdaTyClassInst (mg_binds g)) (mg_insts g)))
 
   -- putMsgS "Binders:"
   -- putMsg (ppr (mg_binds g))
-  -- putMsg . ppr . map (ppr . map (\b -> ppr (varUnique b) <+> text "::" <+> ppr (varType b))) .
+  -- putMsg . ppr . map (ppr . map (\b -> ppr b <+> text "::" <+> ppr (varType b))) .
   --   flip map (mg_binds g) $ \case
   --     (NonRec b _) -> [b] -- ppr b <+> ppr (varType b)
   --     Rec bs -> map fst bs
 
   (xx, yy) <- getAnnotations deserializeWithData g
-  let cgres = codeGenAnns xx yy (mg_tcs g) (mg_binds g)
+  let atcs    = getActiveTyCons yy (mg_tcs g)
+      scenv   = ScanEnv yy (mg_insts g)
+      ubs     = map toUnifiedBind (mg_binds g)
+      scanRes = scanBinds scenv ubs
 
-  let wholeMod = ppWholeModule (moduleName m) localImports cgres
-  putMsg wholeMod
+  case scanRes of
+    Left e -> putMsgS "Hs2Agda: error:" >> putMsg (ppScanError e)
+    Right abds -> do
+      -- let cgres = codeGenAnns xx yy (mg_tcs g) (mg_binds g)
+      -- let wholeMod = ppWholeModule (moduleName m) localImports cgres
+      let wholeMod = ppWholeModule (moduleName m) localImports atcs abds
+      putMsg wholeMod
 
-  let agdaFilePath = (mkAgdaFilePath . agdaModulePath) (moduleName m)
-  putMsgS $ "Writing file: " ++ agdaFilePath
-  liftIO $ do
-    createDirectoryIfMissing True (takeDirectory agdaFilePath)
-    writeFile agdaFilePath (showSDoc dflags wholeMod)
+      let agdaFilePath = (mkAgdaFilePath . agdaModulePath) (moduleName m)
+      putMsgS $ "Writing file: " ++ agdaFilePath
+      liftIO $ do
+        createDirectoryIfMissing True (takeDirectory agdaFilePath)
+        writeFile agdaFilePath (showSDoc dflags wholeMod)
 
   return g
 
