@@ -44,21 +44,6 @@ library
     hs-source-dirs:   src
     default-language: Haskell2010
 
-executable hs2agda-plugin
-    main-is:          Main.hs
-
-    -- Modules included in this executable, other than Main.
-    other-modules: App.Utils
-
-    -- LANGUAGE extensions used by modules in this package.
-    -- other-extensions:
-    build-depends:
-        base < 4.19,
-        hs2agda-plugin
-
-    hs-source-dirs:   app
-    default-language: Haskell2010
-
 test-suite hs2agda-plugin-test
     default-language: Haskell2010
     type:             exitcode-stdio-1.0
