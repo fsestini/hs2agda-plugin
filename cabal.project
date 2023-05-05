@@ -1,0 +1,2 @@
+packages : ./hs2agda-plugin.cabal
+tests: True
